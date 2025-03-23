@@ -1,6 +1,6 @@
 import sys
 import os
-import re
+import shutil
 import pandas as pd
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -22,6 +22,17 @@ class RenameRuleWidget(QWidget):
         self.content_input = QLineEdit()
         self.content_input.setPlaceholderText("输入自定义文本")
 
+        # 数据类型选择
+        self.data_type_combo = QComboBox()
+        self.data_type_combo.addItems(["文字", "整数", "浮点数"])
+        self.data_type_combo.currentTextChanged.connect(self._on_data_type_changed)
+
+        # 小数位数设置
+        self.decimal_spin = QSpinBox()
+        self.decimal_spin.setRange(0, 6)
+        self.decimal_spin.setValue(0)
+        self.decimal_spin.setVisible(False)
+
         # 分隔符选择
         self.separator_combo = QComboBox()
         self.separator_combo.addItems(["-", "_", " ", "自定义"])
@@ -37,6 +48,8 @@ class RenameRuleWidget(QWidget):
         # 布局
         self.layout.addWidget(self.type_combo)
         self.layout.addWidget(self.content_input)
+        self.layout.addWidget(self.data_type_combo)
+        self.layout.addWidget(self.decimal_spin)
         self.layout.addWidget(QLabel("分隔符:"))
         self.layout.addWidget(self.separator_combo)
         self.layout.addWidget(self.custom_separator)
@@ -49,6 +62,10 @@ class RenameRuleWidget(QWidget):
             self.content_input.setText("")
         else:
             self.content_input.setEnabled(True)
+
+    def _on_data_type_changed(self, text):
+        """当数据类型变化时，显示或隐藏小数位数设置"""
+        self.decimal_spin.setVisible(text == "浮点数")
 
     def _on_separator_changed(self, text):
         """当分隔符选择变化时，显示或隐藏自定义分隔符输入框"""
@@ -83,6 +100,7 @@ class FileSearchThread(QThread):
 
     def run(self):
         try:
+            print("文件搜索线程已启动")  
             results = {}
             unmatched_files = []
             multiple_matches = []
@@ -322,6 +340,29 @@ class SmartRenamer(QMainWindow):
             return
 
         try:
+            # 步骤1: 选择操作方式
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("选择操作方式")
+            msg_box.setText("请选择如何保存重命名的文件：")
+            modify_btn = msg_box.addButton("直接修改原文件", QMessageBox.ButtonRole.YesRole)
+            copy_btn = msg_box.addButton("生成新文件副本", QMessageBox.ButtonRole.NoRole)
+            msg_box.exec()
+
+            if msg_box.clickedButton() == modify_btn:
+                modify_original = True
+                dest_folder = self.target_folder
+            else:
+                modify_original = False
+                dest_folder = QFileDialog.getExistingDirectory(self, "选择保存新文件的位置")
+                if not dest_folder:
+                    return
+
+                # 防止保存到代码目录
+                current_script_dir = os.path.dirname(os.path.abspath(__file__))
+                if os.path.abspath(dest_folder) == current_script_dir:
+                    QMessageBox.critical(self, "错误", "禁止保存到代码所在目录！")
+                    return
+
             # 收集所有规则项
             rules = []
             for i in range(self.rule_list.count()):
@@ -341,7 +382,21 @@ class SmartRenamer(QMainWindow):
                         if rule.type_combo.currentText() == "自定义文本":
                             text = rule.content_input.text()
                         else:
-                            text = str(row[rule.type_combo.currentText()])
+                            # 获取原始数据并处理数据类型
+                            raw_value = str(row[rule.type_combo.currentText()])
+                            data_type = rule.data_type_combo.currentText()
+                            
+                            try:
+                                if data_type == "整数":
+                                    text = str(int(float(raw_value)))
+                                elif data_type == "浮点数":
+                                    decimals = rule.decimal_spin.value()
+                                    text = f"{float(raw_value):.{decimals}f}"
+                                else:
+                                    text = raw_value
+                            except:
+                                text = raw_value  # 转换失败时保留原值
+                        
                         parts.append(text)
                         
                         # 添加分隔符（最后一项不加）
@@ -352,16 +407,21 @@ class SmartRenamer(QMainWindow):
                     # 构建新文件名
                     new_name = ''.join(parts) + os.path.splitext(filename)[1]
                     old_path = os.path.join(self.target_folder, filename)
-                    new_path = os.path.join(self.target_folder, new_name)
+                    new_path = os.path.join(dest_folder, new_name)
                     
                     # 处理重名冲突
                     counter = 1
+                    base_name, ext = os.path.splitext(new_name)
                     while os.path.exists(new_path):
-                        base, ext = os.path.splitext(new_name)
-                        new_path = f"{base}_{counter}{ext}"
+                        new_path = os.path.join(dest_folder, f"{base_name}_{counter}{ext}")
                         counter += 1
                     
-                    os.rename(old_path, new_path)
+                    # 执行文件操作
+                    if modify_original:
+                        os.rename(old_path, new_path)
+                    else:
+                        shutil.copy2(old_path, new_path)
+                    
                     success += 1
                 except Exception as e:
                     errors += 1
@@ -371,10 +431,10 @@ class SmartRenamer(QMainWindow):
             QMessageBox.information(
                 self,
                 "完成",
-                f"重命名完成！\n成功: {success} 个\n失败: {errors} 个"
+                f"操作完成！\n成功: {success} 个\n失败: {errors} 个"
             )
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"执行重命名时出错: {str(e)}")
+            QMessageBox.critical(self, "错误", f"执行操作时出错: {str(e)}")
 
 
 if __name__ == "__main__":
