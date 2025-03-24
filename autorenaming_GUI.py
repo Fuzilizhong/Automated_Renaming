@@ -35,7 +35,7 @@ class RenameRuleWidget(QWidget):
 
         # 分隔符选择
         self.separator_combo = QComboBox()
-        self.separator_combo.addItems(["-", "_", " ", "自定义"])
+        self.separator_combo.addItems(["-", "_", " （一个空格）", "自定义（允许为空）"])
         self.custom_separator = QLineEdit()
         self.custom_separator.setVisible(False)
         self.separator_combo.currentTextChanged.connect(self._on_separator_changed)
@@ -69,7 +69,7 @@ class RenameRuleWidget(QWidget):
 
     def _on_separator_changed(self, text):
         """当分隔符选择变化时，显示或隐藏自定义分隔符输入框"""
-        self.custom_separator.setVisible(text == "自定义")
+        self.custom_separator.setVisible(text == "自定义（允许为空）")
 
     def _delete_self(self):
         """删除当前规则项"""
@@ -82,7 +82,7 @@ class RenameRuleWidget(QWidget):
 
     def get_separator(self):
         """获取当前分隔符"""
-        if self.separator_combo.currentText() == "自定义":
+        if self.separator_combo.currentText() == "自定义（允许为空）":
             return self.custom_separator.text()
         return self.separator_combo.currentText()
 
@@ -151,7 +151,7 @@ class SmartRenamer(QMainWindow):
         self.type_combo.addItems(["pdf", "docx", "doc", "其他"])
 
         # Excel文件选择
-        self.excel_btn = QPushButton("选择Excel文件")
+        self.excel_btn = QPushButton("选择一个Excel文件用于匹配预重命名文件")
         self.excel_label = QLabel("未选择文件")
 
         # 目标文件夹选择
@@ -173,21 +173,21 @@ class SmartRenamer(QMainWindow):
         self.search_btn = QPushButton("开始搜索匹配")
         self.status_output = QTextEdit()
 
-        match_layout.addWidget(QLabel("选择匹配列（可多选）:"))
+        match_layout.addWidget(QLabel("选择Excel文件中的匹配列，用于检索目标文件夹中的文件（可多选）:"))
         match_layout.addWidget(self.column_list)
         match_layout.addWidget(self.search_btn)
         match_layout.addWidget(QLabel("匹配状态:"))
         match_layout.addWidget(self.status_output)
 
         # 操作步骤3: 重命名规则
-        rule_group = QGroupBox("步骤3: 命名规则")
+        rule_group = QGroupBox("步骤3: 自定义重命名规则")
         rule_layout = QVBoxLayout(rule_group)
 
         self.rule_list = QListWidget()
         self.rule_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
-        self.add_rule_btn = QPushButton("添加规则项")
+        self.add_rule_btn = QPushButton("添加规则项，可以选择Excel表格中的列或自定义文本")
 
-        rule_layout.addWidget(QLabel("拖拽调整顺序:"))
+        rule_layout.addWidget(QLabel("可拖拽调整顺序:"))
         rule_layout.addWidget(self.rule_list)
         rule_layout.addWidget(self.add_rule_btn)
 
